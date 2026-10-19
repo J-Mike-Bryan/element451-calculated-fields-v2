@@ -321,3 +321,7 @@ Use the observations in this case study as evidence, then construct a current fo
 - `references/root-field-example-latest-application.md` for a complete guarded, static-lint-clean application example.
 
 If a supplied tenant rule also needs a term allow-list, add exact term checks to **every independently bounded candidate**, using user-supplied GUIDs, and test both Evaluate and Preview Export. Do not resurrect the historical wildcard-dot regex merely because it worked in one case.
+
+## Large-formula performance observations
+
+Treat approximately 500,000 formula characters as a user-observed warning from testing, not an official export limit. An assembled compact-record rewrite was subsequently reported working. See `references/compact-root-pipelines.md` for details, confidence boundaries, compatibility tests, and the required ID/row-count reconciliation. Continue checking square-bracket tokenization and regex-wrapper compatibility even after source size drops substantially.

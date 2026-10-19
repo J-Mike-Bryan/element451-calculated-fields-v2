@@ -140,9 +140,22 @@ The pattern above targets a literal double quote. The four quote characters in t
 - Common direction: human-readable name/code to GUID, or GUID to code/name.
 - Use the exact entity type and keys supported by the target collection.
 - The training source says input is trimmed and normalized before matching; verify if punctuation-sensitive matching matters.
+- **User-verified major behavior (September 2026):** `FIRST(DB_MAP("major", <major-guid>, "guid", "degrees", ""))` returned the associated degree code for both active and inactive majors. This establishes a reusable pattern for major GUID -> degree mapping when inactive majors must remain resolvable. The exact formula context was not separately recorded, so verify again before treating this as context-specific behavior.
 
 ```text
 DB_MAP("term", CONCAT("Fall ", [C2]), "name", "guid", "")
+```
+
+```text
+FIRST(
+    DB_MAP(
+        "major",
+        <major-guid>,
+        "guid",
+        "degrees",
+        ""
+    )
+)
 ```
 
 ### `DS_MAP(input, data_source, match_key, output_key, default)`
@@ -151,6 +164,7 @@ DB_MAP("term", CONCAT("Fall ", [C2]), "name", "guid", "")
 - Finds an option in a regular data source and returns another column from that option.
 - The data source identifier and column names are client-specific.
 - For regular data sources, database columns may be named `column_1`, `column_2`, and so on even when the UI has friendly labels.
+- **User-verified major limitation (September 2026):** a lookup through the majors data source returned no degree value for an inactive major, while `DB_MAP("major", ...)` resolved the same inactive major successfully. When mapping core major records and inactive majors may be present, prefer `DB_MAP("major", ...)` over `DS_MAP(..., <majors-data-source>, ...)`. Do not generalize this observation to every regular data source without separate testing.
 
 ```text
 DS_MAP([C1], "data_source.major", "code", "guid", "")
@@ -204,8 +218,9 @@ CHECKBOX_CHECKED([user-race-categories], ",")
 
 ### `FIRST(value)`
 
-- **Evidence:** Official example.
-- Used by the official calculated-fields article to return the first item from a mapped list, such as a major's associated degree.
+- **Evidence:** Official example plus user-reported Export runtime success.
+- Used by the official calculated-fields article to return the first item from a mapped list, such as a major's associated degree or another list-backed classification.
+- A September 2026 user-reported working Export formula successfully used `FIRST(DS_MAP(<major-guid>, <major-data-source>, "guid", <classification-column>, ""))` inside each independently bounded application-submit milestone candidate, then compared that scalar result against a small exact allow-list. A follow-up formula changed only the allow-list values and was also reported working. Treat the data source, output column, and allowed codes as tenant-specific; the reusable evidence is the `FIRST(DS_MAP(...))` scalar-mapping pattern inside same-object eligibility logic.
 - The bundled sources do not fully specify ordering or behavior for empty/non-list input. Verify with Evaluate before relying on those details.
 
 ### Importing labels
@@ -292,12 +307,15 @@ For historical timestamps spanning both seasons, do not describe either fixed of
 - Splits text and returns the indexed segment.
 - Bundled examples use one-based indexing.
 - When splitting on a marker, index `1` is the text before the first marker and index `2` is the first matching segment after it.
+- **User-verified Import lookup pattern (September 2026):** nested `SPLIT_INDEX` successfully resolved values from a large literal table shaped like `|<fixed-width-key>=<value>|...` after the source key was re-padded to its required width. The working design split first on the exact `|<normalized-key>=` delimiter and then on the next `|`. Appending a synthetic `<normalized-key>=<normalized-key>|` entry provided an unknown-key fallback. This replaced a statically valid escaped-pipe `REGEXP_EXTRACT` lookup that had returned blank for all tested values. Keep the observation scoped to this delimiter-table Import architecture; it does not establish a general regex failure.
 
 ### `CONTAINS(text, substring)`
 
-- **Evidence:** Training and examples.
-- Returns true/false when the substring occurs.
-- **Boolean-coercion caution:** In some Element contexts, boolean-returning helpers have required an explicit comparison before use inside `IF`. A verified root-field export used a `CONTAINS` allow-list directly as the `IF` condition and incorrectly allowed every term. Evaluate `CONTAINS(...)` by itself and compare explicitly to the observed `TRUE`/`"TRUE"` representation if needed. For a short exact allow-list, explicit equality joined with `|` is safer.
+- **Evidence:** Training, examples, and user-verified runtime probes.
+- Returns true/false when the substring occurs on ordinary literal text. A focused runtime probe returned Boolean `True` for `CONTAINS("abcdef", "cd")` and Boolean `False` for `CONTAINS("abcdef", "xyz")`.
+- In that same context, both `CONTAINS("abcdef", "cd") = TRUE` and `CONTAINS("abcdef", "cd") = "TRUE"` entered the true branch, while the negative case compared to `"TRUE"` entered the false branch. Therefore, do **not** diagnose every `CONTAINS` failure as a generic boolean-versus-text mismatch; Element may coerce the comparison form in some contexts.
+- **`[user-labels-all]` caution:** user-verified label tests exposed field-specific behavior that did not match the ordinary literal probes. A direct `CONTAINS([user-labels-all], "<LABEL_GUID>")` condition returned the positive branch even for records expected not to match, while a comma-bounded/space-normalized `CONTAINS(CONCAT(...), ",<LABEL_GUID>,") = TRUE` pattern returned the negative branch even for a known matching label. The same label membership check worked correctly with `REGEXP_MATCH([user-labels-all], ".*<LABEL_GUID>.*") = TRUE` in the tested context. Treat this as a `[user-labels-all]` representation/runtime interaction, not proof that `CONTAINS` is globally broken.
+- For label membership on `[user-labels-all]`, prefer the user-verified `REGEXP_MATCH` pattern unless the exact serialized delimiter shape has been inspected and a `CONTAINS` formulation has been proven on both matching and nonmatching users. For ordinary strings, `CONTAINS` remains valid; for short exact allow-lists, explicit equality joined with `|` is still safer than substring membership.
 
 ### `STARTS_WITH(text, substring)` and `ENDS_WITH(text, substring)`
 
@@ -327,9 +345,10 @@ For historical timestamps spanning both seasons, do not describe either fixed of
 
 ### `UPPER(text)`, `LOWER(text)`, and `TITLECASE(text)`
 
-- **Evidence:** `TITLECASE` is Official; `UPPER` and `LOWER` are Observed.
+- **Evidence:** `TITLECASE` is Official; `UPPER` and `LOWER` are Observed. The `TITLECASE(LOWER(...))` name-normalization pattern is also user-verified in the Import context.
 - Apply case conversion after handling blanks and compound names.
-- Do not assume a simple title-case rule handles apostrophes, hyphens, prefixes, or more than two name parts.
+- **User-verified Import behavior (September 2026):** when an all-uppercase or all-lowercase name was normalized with `TITLECASE(LOWER(...))`, space-delimited words were capitalized, but apostrophes, hyphens, and `Mc`-style internal capitalization were not treated as special name boundaries. Reported results included `O'CONNOR` / `o'connor` -> `O'connor`, `SMITH-JONES` / `smith-jones` -> `Smith-jones`, `MCDONALD` / `mcdonald` -> `Mcdonald`, and `DE LA CRUZ` / `de la cruz` -> `De La Cruz`. The test was performed on an Import formula; the exact preview/evaluation surface was not separately specified.
+- Treat this as evidence that the pattern is useful for ordinary capitalization cleanup but is not a culturally or linguistically complete personal-name formatter. Preserve already mixed-case names when possible instead of blindly forcing every value through `TITLECASE(LOWER(...))`.
 
 ### `PAD(value, pad_character, total_length)`
 
@@ -380,3 +399,9 @@ Do not hide these differences:
 4. Boolean examples alternate among raw `TRUE`, title-case `True`, and quoted `"TRUE"`. Test the actual return type.
 5. Some official and user examples contain typographical or client-specific details. Normalize straight quotes, check commas and arity, preserve exact field slugs, and run the linter.
 6. Data source IDs, taxonomy GUIDs, application GUIDs, major GUIDs, and field slugs are tenant-specific unless explicitly documented as global.
+
+## Compact-pipeline regex evidence and capture discipline
+
+A September 2026 user report confirmed the assembled optimized export formulas that use compact-record strings, named pattern captures/backreferences, numbered replacement captures, and regex reduction. See `references/compact-root-pipelines.md` for the full method and exact scope. The feedback did not separately enumerate every primitive probe or export execution surface.
+
+Use `(?P<name>...)` with `(?P=name)` for pattern-side equality and `${n}` for numbered replacement captures. In the bundled reducer, groups 1-3 belong to comparisons and groups 4-5 hold alternate winner rows; `${4}${5}` relies on unmatched branch captures becoming empty. Adding capturing parentheses changes replacement indices. Use noncapturing groups for structural grouping, avoid bracketed regex classes in exports, and verify exact alternatives in the destination context. Do not generalize this confirmation into support for arbitrary PCRE features, new Element functions, or named replacement variables.

@@ -665,103 +665,31 @@ IF(
 ## Labels and prioritized status
 
 
-### Highest-priority active status from exact label GUIDs
+### Highest-priority active status from label GUIDs
 
 **Context:** Workflow/Rule Formula Field or Export
 
-Choose the furthest-progressed fictional status from six exact label GUIDs; preserve the current value if none is present.
+Choose the furthest-progressed fictional status from six label GUIDs; preserve the current value if none is present.
 
 <!-- formula-lint: export -->
 ```text
 IF(
-    CONTAINS(
-        CONCAT(
-            ",",
-            REGEXP_REPLACE(
-                [user-labels-all],
-                " ",
-                ""
-            ),
-            ","
-        ),
-        ",school.taxonomy.60006,"
-    )
-    = TRUE,
+    REGEXP_MATCH([user-labels-all], ".*school.taxonomy.60006.*") = TRUE,
     "Enrolled",
     IF(
-        CONTAINS(
-            CONCAT(
-                ",",
-                REGEXP_REPLACE(
-                    [user-labels-all],
-                    " ",
-                    ""
-                ),
-                ","
-            ),
-            ",school.taxonomy.60005,"
-        )
-        = TRUE,
+        REGEXP_MATCH([user-labels-all], ".*school.taxonomy.60005.*") = TRUE,
         "Deposited",
         IF(
-            CONTAINS(
-                CONCAT(
-                    ",",
-                    REGEXP_REPLACE(
-                        [user-labels-all],
-                        " ",
-                        ""
-                    ),
-                    ","
-                ),
-                ",school.taxonomy.60004,"
-            )
-            = TRUE,
+            REGEXP_MATCH([user-labels-all], ".*school.taxonomy.60004.*") = TRUE,
             "Admitted",
             IF(
-                CONTAINS(
-                    CONCAT(
-                        ",",
-                        REGEXP_REPLACE(
-                            [user-labels-all],
-                            " ",
-                            ""
-                        ),
-                        ","
-                    ),
-                    ",school.taxonomy.60003,"
-                )
-                = TRUE,
+                REGEXP_MATCH([user-labels-all], ".*school.taxonomy.60003.*") = TRUE,
                 "Applicant",
                 IF(
-                    CONTAINS(
-                        CONCAT(
-                            ",",
-                            REGEXP_REPLACE(
-                                [user-labels-all],
-                                " ",
-                                ""
-                            ),
-                            ","
-                        ),
-                        ",school.taxonomy.60002,"
-                    )
-                    = TRUE,
+                    REGEXP_MATCH([user-labels-all], ".*school.taxonomy.60002.*") = TRUE,
                     "Application Started",
                     IF(
-                        CONTAINS(
-                            CONCAT(
-                                ",",
-                                REGEXP_REPLACE(
-                                    [user-labels-all],
-                                    " ",
-                                    ""
-                                ),
-                                ","
-                            ),
-                            ",school.taxonomy.60001,"
-                        )
-                        = TRUE,
+                        REGEXP_MATCH([user-labels-all], ".*school.taxonomy.60001.*") = TRUE,
                         "Inquiry",
                         [user-custom-field-active-status]
                     )
@@ -774,54 +702,45 @@ IF(
 
 **Why this is stronger**
 - Checks highest priority first, so no branch needs to prove every later status is absent.
-- Uses comma-bounded exact GUID membership instead of regex or partial substring matching.
-- Normalizes spaces in the comma-delimited GUID list.
+- Uses the `[user-labels-all]` membership technique that is user-verified to work after two `CONTAINS` variants produced incorrect results in the tested label context.
 - Removes redundant checks against the current status; returning the same value is already safe.
 
 **Assumptions and limits**
 - Replace every GUID and status value with current-tenant values.
-- Verify whether `CONTAINS` returns boolean `TRUE` or text `"TRUE"` in this context and adjust the explicit comparison if needed.
+- The regex is a full-GUID substring check. If one identifier could be a substring of another, inspect the raw `[user-labels-all]` representation and derive token boundaries before production use.
 - A formula that writes to a data-source-backed status field must return an accepted destination value.
 
 **Evaluate checks**
-- No labels, each label alone, all labels together, two nonadjacent labels, a GUID that merely contains another GUID, and spaces after commas.
+- No labels, each label alone, all labels together, two nonadjacent labels, a neighboring/longer GUID that contains the target text, and a blank label field.
 
-### Exact export label check
+### Label GUID membership check
 
-**Context:** Export
+**Context:** Export or Workflow/Rule Formula Field
 
-Return `Transfer` when one exact fictional label GUID exists; otherwise return `Freshman`.
+Return `Transfer` when one fictional label GUID is present; otherwise return `Freshman`.
 
 <!-- formula-lint: export -->
 ```text
 IF(
-    CONTAINS(
-        CONCAT(
-            ",",
-            REGEXP_REPLACE(
-                [user-labels-all],
-                " ",
-                ""
-            ),
-            ","
-        ),
-        ",school.taxonomy.70001,"
-    )
-    = TRUE,
+    REGEXP_MATCH(
+        [user-labels-all],
+        ".*school.taxonomy.70001.*"
+    ) = TRUE,
     "Transfer",
     "Freshman"
 )
 ```
 
 **Why this is stronger**
-- Avoids treating the GUID as a regex pattern.
-- Prevents partial GUID matches by adding delimiter boundaries.
+- Uses the same `REGEXP_MATCH` approach that was user-verified against a real label-membership case.
+- Avoids assuming `[user-labels-all]` is a simple comma-delimited string; that assumption caused a known-positive `CONTAINS` boundary formula to return the negative branch.
 
 **Assumptions and limits**
 - Confirm the default classification is really `Freshman`; many policies should return blank when neither category is proven.
+- This is a substring-style regex over the full GUID. Inspect the raw label serialization if exact token boundaries are required.
 
 **Evaluate checks**
-- Exact label, absent label, neighboring GUID, partial GUID, blank label list, and multiple labels.
+- Exact label present, label absent, blank label field, multiple labels, and a longer identifier containing the same target text.
 
 
 ## Dates and elapsed time

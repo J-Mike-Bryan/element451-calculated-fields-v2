@@ -9,6 +9,7 @@
 - [Workflow/Rule persistence validation](#workflowrule-persistence-validation)
 - [Calculated-payment validation](#calculated-payment-validation)
 - [Reference-formula regression linting](#reference-formula-regression-linting)
+- [Linked application export validation](#linked-application-export-validation)
 - [Incremental debugging workflow](#incremental-debugging-workflow)
 - [Syntax checklist](#syntax-checklist)
 - [Type checklist](#type-checklist)
@@ -170,6 +171,10 @@ python3 scripts/lint_reference_formulas.py references/source-formula-examples.md
 
 This prevents a documentation edit from silently introducing unbalanced syntax, unknown functions, arity problems, or export-preview bracket tokens. Warnings still require judgment; static linting never substitutes for Element runtime testing.
 
+## Linked application export validation
+
+Use `references/application-root-linked-exports.md` for companion columns sharing one application selector. Test identity first, then verify all fields come from that winner even when one selected value is missing. Run the literal packed-slot diagnostics separately, including leading/internal/trailing blanks, before an assembled formula. Keep local abstract invariant tests, static formula linting, Evaluate, and Preview Export as separate evidence; do not reuse old simulation totals without their actual reproducible harness and fixtures.
+
 ## Incremental debugging workflow
 
 For a long formula, avoid changing the whole expression at once.
@@ -213,7 +218,10 @@ When debugging a production formula, save the last known working version before 
 - For calculated payments, keep every branch numeric.
 - For Workflow/Rule writes, verify both evaluated output and persisted destination value.
 - Do not use a boolean-returning helper directly as an `IF` condition unless its return type has been proven in that context. If Evaluate shows a boolean/text discrepancy, compare explicitly to `TRUE` or `"TRUE"`.
+- Do not assume a failing `CONTAINS` formula is caused by boolean coercion. A user-verified probe returned real Boolean `True`/`False` on literal strings, and both `= TRUE` and `= "TRUE"` behaved as true for the positive case. When `CONTAINS` behaves differently on a complex Element field, isolate the field representation separately.
+- For `[user-labels-all]`, test at least one known-positive and one known-negative user with the exact production expression. In a verified label case, direct `CONTAINS` over-matched, a comma-bounded normalized `CONTAINS` under-matched, and `REGEXP_MATCH([user-labels-all], ".*<LABEL_GUID>.*") = TRUE` produced the expected membership result. Prefer the verified regex pattern until the raw label-list serialization is proven.
 - Preserve leading zeros as text when they are identifiers rather than quantities.
+- In Import debugging, distinguish the raw file from Element's preview representation. If a CSV/text inspection proves a fixed-width identifier still contains its leading zeros but Import Preview displays the value numerically, echo a normalization expression such as `RIGHT(CONCAT("000000", TRIM([C#])), 6)` before debugging the downstream map. A user-verified Import lookup continued to work after Preview had omitted leading zeros because the formula rebuilt the six-character key before matching. Do not conclude that the CSV lost zeros solely from the Preview display.
 
 ## Date checklist
 
@@ -259,6 +267,7 @@ Do not assume a dropdown's displayed label is the stored value. Data-source UI l
 - Anchor exact sentinel matches with `^` and `$`.
 - Test strings containing delimiters, empty strings, and near-matches.
 - Remember that `CONTAINS` is simpler than regex but is not token-aware.
+- For a simple literal table shaped like `|key=value|...`, do not keep increasing regex escaping complexity after the normalized key has been proven correct. In a user-verified Import case, an escaped-pipe `REGEXP_EXTRACT` lookup was syntactically valid yet returned blank for every tested key; nested `SPLIT_INDEX` using the exact `|key=` delimiter worked. Treat this as a lookup-shape-specific fallback, not a blanket preference against regex.
 
 ## Root-field checklist
 
@@ -289,6 +298,7 @@ Do not assume a dropdown's displayed label is the stored value. Data-source UI l
 |---|---|---|
 | Formula parser error | Smart quote, missing comma, unbalanced parenthesis, broken embedded quote | Run linter; inspect the first reported location and nearby nested call |
 | Blank for every record | Wrong field slug, marker mismatch, mutable name used instead of canonical type, map direction, quoted/unquoted mismatch | Return the raw field; count the canonical type marker; expose a visible map default |
+| Embedded Import crosswalk returns blank for every known key | Source key was not normalized to its fixed width, or a delimiter-heavy regex lookup does not behave as expected at runtime despite passing static checks | Echo the normalized key first; if it is correct, replace a simple `|key=value|` regex extraction with nested `SPLIT_INDEX` on the exact `|key=` delimiter and retest |
 | Correct for one record only | Missing blank handling, optional property, occurrence limit, order assumption | Build a test matrix across edge cases |
 | Automatic milestones match but manual/imported milestones do not | Mutable name marker, prefix-only validation, ordered property regex, or source-specific null/extra metadata | Reconstruct one manual/import object; test type/application/term/major independently |
 | Returns an Application/Admit/other-object date when the target milestone/object is absent | Reconstruction runs for a nonexistent nth target occurrence and borrows neighboring-object text | Evaluate `SPLIT_INDEX([root], marker, index)` alone; add an outer existence guard before reconstruction for every candidate slot |
@@ -302,6 +312,8 @@ Do not assume a dropdown's displayed label is the stored value. Data-source UI l
 | Allowed-term filter accepts every term | Boolean membership helper coerced unexpectedly, term extraction not scoped, or substring membership too broad | Return one raw term; test exact equality; expand to OR list |
 | Escaped-dot regex makes every match blank | `\.` rewrite not interpreted as expected in Element's formula/regex pipeline | Test regex alone; use explicit equality or a preview-safe verified pattern |
 | Correct milestone selected but term-derived date/name is wrong | Tenant GUID mapping was guessed or stale | Return the raw selected GUID; verify GUID -> code/name before formatting |
+| Year returns but season is blank | Separate prefix/suffix decoding, inconsistent companion selection, case/space differences, unrecognized code, or record-boundary assumptions | Compare selectors; expose the selected term GUID and raw/normalized code/name; use `references/term-root-fallback.md` |
+| An application overrides an eligible milestone, or fallback conceals an unknown primary season | Source priority omitted, source score too small, or fallback based on formatted blank | Check primary eligibility independently of decoding and verify the full source-score range |
 | Map returns default | Wrong match/output direction or wrong data-source column | Expose input and use `"NO_MATCH"` |
 | Label import partially works | Spaces, blank components, names not mapped to GUIDs | Evaluate the exact comma-separated output |
 | Name capitalization damages values | Formula handles only one/two parts or ignores apostrophes/hyphens | Define supported name shapes before expanding logic |
@@ -322,3 +334,9 @@ Use a small table in the response for complex formulas:
 | Boundary | Date near midnight or threshold | Correct side of rule |
 
 For each case, distinguish a logically expected result from a result actually verified in Element. Do not claim runtime verification unless Evaluate or user feedback confirms it.
+
+## Oversized formulas, compact pipelines, and row completeness
+
+Read `references/compact-root-pipelines.md` when formula growth or export slowdowns are material. The approximate 500,000-character warning is an explicit user testing observation, not an official Element451 ceiling or proof of causation for omitted rows. Use `scripts/formula_size_report.py` to report actual source characters/bytes, nesting depth, lookup call sites, and field references. These are source metrics, not elapsed-time benchmarks.
+
+After optimization, preserve eligibility, precision, tie policy, raw coverage, and blank behavior; run compatibility probes, Evaluate, Preview Export, and a small actual export. Reconcile stable IDs and total rows with expected records. Investigate scope, empty-value settings, validation, and operation errors rather than assuming length is the only cause. A shorter expression and correct values on surviving rows do not prove completeness. The compact helper's PHP tests cover normalized table transforms only; they do not test root extraction or Element runtime.

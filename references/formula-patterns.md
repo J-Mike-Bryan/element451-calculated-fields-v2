@@ -169,6 +169,58 @@ SUBSTR(
 
 Confirm whether an eight-character source means a missing leading zero in a nine-digit ZIP or whether it contains punctuation. Do not assume.
 
+### Exact lookup in an embedded delimiter table
+
+Use this pattern when an Import calculated field contains a literal fixed-width `key -> value` crosswalk and the incoming identifier may be displayed without its leading zeros in Import Preview. Separate normalization from lookup: first restore the fixed-width text key, then match on an exact delimiter boundary.
+
+A user-verified Import case had six-character identifiers in the CSV, while Import Preview displayed the same values without leading zeros. The formula restored the key with:
+
+```text
+RIGHT(CONCAT("000000", TRIM([C1])), 6)
+```
+
+That normalization means an incoming `123` becomes `000123` before matching. Use `RIGHT(..., 6)` only when the identifier is defined to be exactly six characters; otherwise choose the correct fixed width and do not silently truncate legitimately longer identifiers.
+
+For a table shaped like `|000123=ABCD|001234=EFGH|`, nested `SPLIT_INDEX` provides an exact lookup without regex escaping:
+
+```text
+IF(
+    TRIM([C1]) = "",
+    "",
+    SPLIT_INDEX(
+        SPLIT_INDEX(
+            CONCAT(
+                "|000123=ABCD|001234=EFGH|",
+                RIGHT(CONCAT("000000", TRIM([C1])), 6),
+                "=",
+                RIGHT(CONCAT("000000", TRIM([C1])), 6),
+                "|"
+            ),
+            CONCAT(
+                "|",
+                RIGHT(CONCAT("000000", TRIM([C1])), 6),
+                "="
+            ),
+            2
+        ),
+        "|",
+        1
+    )
+)
+```
+
+Execution order:
+
+1. Blank input returns `""`.
+2. `RIGHT(CONCAT(...), width)` rebuilds the fixed-width text key even if Preview omitted leading zeros.
+3. The outer `CONCAT` appends a synthetic `normalized-key=normalized-key|` entry. This is the fallback; if the real table contains the key, its earlier entry is selected. If the key is unknown, the appended entry returns the normalized input itself.
+4. The inner `SPLIT_INDEX(..., CONCAT("|", normalized-key, "="), 2)` jumps to the text after the exact key boundary.
+5. The outer `SPLIT_INDEX(..., "|", 1)` returns only that key's mapped value.
+
+This architecture was user-reported working in the Element451 Import context after a syntactically valid `REGEXP_EXTRACT` version with escaped pipe boundaries returned blank for all tested codes. Treat that as evidence for this delimiter-table lookup shape, not a general claim that `REGEXP_EXTRACT` is broken. Before rewriting a lookup, echo the normalized key alone so source coercion and lookup behavior are diagnosed separately.
+
+If unknown keys should return blank or another diagnostic rather than the normalized input, change the appended synthetic fallback accordingly instead of changing the exact-match delimiter strategy.
+
 ## Taxonomy and data-source mapping
 
 ### Name to taxonomy GUID
@@ -194,6 +246,30 @@ DB_MAP("term", CONCAT("Fall ", [C2]), "name", "guid", "")
 ```text
 DB_MAP("major", [C2], "cip", "guid", "")
 ```
+
+### Major GUID to associated degree, including inactive majors
+
+A September 2026 user-reported runtime test showed that the database-backed major lookup continued to resolve inactive majors, while the comparable majors data-source lookup returned blank for an inactive major. Use this pattern when historical/inactive majors must still map to their associated degree value:
+
+```text
+FIRST(
+    DB_MAP(
+        "major",
+        <major-guid>,
+        "guid",
+        "degrees",
+        ""
+    )
+)
+```
+
+Treat `<major-guid>` as request-scoped tenant data. The exact runtime context was not separately recorded, so re-verify if context-specific behavior matters.
+
+Regression checks for this pattern:
+- active major GUID -> associated degree value,
+- inactive major GUID -> associated degree value,
+- unknown major GUID -> configured default/blank,
+- optional diagnostic comparison: the same inactive major through the majors data source may return blank even though `DB_MAP("major", ...)` resolves it.
 
 ### Regular data source mapping
 
@@ -249,22 +325,22 @@ CONCAT(
 
 This can create duplicate or leading/trailing commas when some columns are blank. For sparse data, use conditional separator logic rather than copying this pattern blindly.
 
-### Test whether a user has one exact label GUID
+### Test whether a user has one label GUID
 
-When `[user-labels-all]` is a comma-delimited GUID list, add delimiter boundaries and avoid treating a tenant GUID as regex syntax:
+For `[user-labels-all]`, prefer the runtime-verified `REGEXP_MATCH` membership pattern rather than assuming the field is a simple comma-delimited string:
 
 ```text
 IF(
-    CONTAINS(
-        CONCAT(",", REGEXP_REPLACE([user-labels-all], " ", ""), ","),
-        ",school.taxonomy.70001,"
+    REGEXP_MATCH(
+        [user-labels-all],
+        ".*school.taxonomy.70001.*"
     ) = TRUE,
     "Transfer",
     "Freshman"
 )
 ```
 
-Replace the fictional GUID. Confirm the actual delimiter shape and boolean representation. A name-to-GUID `TAXONOMY_MAP` may be useful while diagnosing a known label name, but a production formula should not repeatedly map a name when the exact current-task GUID has already been supplied.
+This pattern is based on user-verified label tests where `REGEXP_MATCH` correctly distinguished label presence while two `CONTAINS` approaches did not. Replace the fictional GUID. Because this is a substring-style regex, confirm that the full supplied GUID cannot be a substring of another identifier in the current data. If exact token boundaries matter, first inspect the raw `[user-labels-all]` serialization and derive a boundary-aware regex from that actual shape. A name-to-GUID `TAXONOMY_MAP` may be useful while diagnosing a known label name, but a production formula should not repeatedly map a name when the exact current-task GUID has already been supplied.
 
 ## Checkbox and list fields
 
@@ -372,7 +448,7 @@ Guard blanks before subtracting one from the length.
 
 ### Compound names
 
-The user examples include a two-part space/hyphen pattern. Before using it, decide whether the requirement includes:
+Before normalizing names, decide whether the requirement includes:
 
 - more than two words,
 - apostrophes,
@@ -381,7 +457,16 @@ The user examples include a two-part space/hyphen pattern. Before using it, deci
 - mixed separators,
 - already intentional capitalization.
 
-Do not claim a two-branch formula handles every name.
+A user-verified Import test of `TITLECASE(LOWER(...))` produced these results:
+
+| Input | Output |
+|---|---|
+| `O'CONNOR` or `o'connor` | `O'connor` |
+| `SMITH-JONES` or `smith-jones` | `Smith-jones` |
+| `MCDONALD` or `mcdonald` | `Mcdonald` |
+| `DE LA CRUZ` or `de la cruz` | `De La Cruz` |
+
+This establishes that the pattern capitalizes ordinary space-separated words, but does not automatically restore capitalization after apostrophes or hyphens and does not infer internal capitalization such as `McDonald`. For conservative name cleanup, preserve already mixed-case values and only apply `TITLECASE(LOWER(...))` when the source value is clearly all-uppercase or all-lowercase. Do not claim this handles every personal name. The exact Import preview/evaluation surface for this user test was not separately specified.
 
 ### Remove a URL query string
 

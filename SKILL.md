@@ -1,6 +1,6 @@
 ---
 name: element451-calculated-fields-v2
-description: Write, edit, explain, review, and troubleshoot Element451 formulas used in imports, exports, Workflow/Rule Formula Fields, and calculated payments. Use when a user mentions calculated columns, formula actions, payment calculations, `[C#]` columns, Element field slugs, `DB_MAP`, `DS_MAP`, `TAXONOMY_MAP`, dates, labels, checkbox values, regex, application or milestone root fields, serialized JSON-like data, count/any/latest/earliest or linked argmax/argmin selection, parser or Preview Export errors, successful evaluation that does not persist, or incorrect formula output. Require current-task tenant fields, GUIDs, mappings, target type, and data shape; use only source-supported functions, return complete formulas, validate long formulas, and keep the solution in formulas when required.
+description: Write, edit, explain, review, and troubleshoot Element451 Import/Export formulas, Workflow/Rule Formula Fields, and calculated payments. Use for [C#] columns, Element field slugs, DB_MAP/DS_MAP/TAXONOMY_MAP, dates, labels, checkbox values, regex, milestone/application roots, serialized data, count/any/latest/earliest, first/second/nth optional-field exports, or linked selection, parser/Preview Export errors, failed persistence, incorrect outputs, and oversized or slow formulas. Optimize repeated root scans with compact-record pipelines when appropriate; distinguish raw coverage from valid-match caps. Require current-task tenant identifiers, mappings, destination type, and data shape; use supported functions, return complete formulas, validate syntax and runtime separately, and keep formula-only solutions when required.
 ---
 
 # Element451 Calculated Fields
@@ -31,7 +31,7 @@ Follow these steps in order for every task:
 5. **Verify current behavior when material.** Open the live official page before claiming a function, menu, preview behavior, field setting, or limitation is current.
 6. **Design the logic before writing syntax.** Break the formula into inputs, conditions, candidate values, selection, conversion, and final output.
 7. **Construct the complete formula.** Preserve exact slugs and GUIDs, use straight quotes, guard blanks, and keep types consistent.
-8. **Validate.** Run the bundled formatter/linter for nontrivial formulas and build a representative test matrix.
+8. **Validate and measure.** Run the bundled formatter/linter for nontrivial formulas, measure source size/lookup call sites for long expressions, and build a representative test matrix. Optimize repeated computation before reducing coverage; read the compact-pipeline reference for oversized formulas.
 9. **Return the complete answer.** For an edit, always return the entire updated formula unless the user explicitly requests only a patch.
 
 ## Formula-only constraint
@@ -71,6 +71,12 @@ Read these files only when relevant:
 - **Capability coverage, uncertainty, and test priorities:** `references/formula-capability-matrix.md`
 - **Applications, milestones, and serialized root fields:** `references/root-field-parsing.md`
 - **Count, latest/earliest, threshold, and linked argmax/argmin root selection:** `references/root-field-selection.md`
+- **Latest uploaded college/school by `index_weight` with linked `name`, `type` versus `entry_type`, and compact-root slot projection:** `references/school-root-index-weight.md`
+- **First/second/nth milestone field exports, blank-slot preservation, independent label-derived values, and unsubscribe-email examples:** `references/root-field-ordinal-exports.md`
+- **Oversized/slow root formulas, compact intermediate records, regex elimination and pairwise reduction, and raw-versus-valid coverage:** `references/compact-root-pipelines.md`
+- **Tenant-neutral compact-pipeline compatibility and literal examples:** `references/compact-pipeline-compatibility-probe.txt`, `references/compact-pipeline-literal-input.txt`, `references/compact-pipeline-literal-output.txt`, `references/compact-pipeline-validation.json`
+- **Multiple application export columns sharing one winner, term ranking, and packed-slot selection:** `references/application-root-linked-exports.md`
+- **Milestone-first application fallback, blank season with a correct year, and aligned season/year outputs:** `references/term-root-fallback.md`
 - **Sparse nth-occurrence scans or neighboring-object leakage during root-field reconstruction:** `references/root-field-occurrence-guards.md`
 - **Observed export-preview/root-field pitfalls:** `references/root-field-export-preview.md`
 - **Complete guarded latest-application example:** `references/root-field-example-latest-application.md`
@@ -104,6 +110,25 @@ inputs -> eligibility conditions -> candidate result(s) -> selection -> conversi
 ```
 
 For nested rules, order branches by explicit business priority. For date selection, compare numeric timestamps rather than serialized order.
+
+### Preserve ordinal slots and source meaning
+
+For first/second/nth root-field outputs, read `references/root-field-ordinal-exports.md`. Distinguish the nth type-matching object from the nth nonblank or unique value; unless the rule explicitly filters blanks before selection, select the object first and then project its optional field. Preserve its empty slot rather than borrowing from another object or the current profile. State serialized ordering, duplicate policy, and coverage; two milestone columns do not guarantee all historical values are exported. Keep a separate label-derived value independent when the request defines independent sources. Do not infer current communication eligibility from historical event extraction alone.
+
+### Preserve a linked field when choosing a record by numeric rank
+
+When a repeatable root's highest numeric `index_weight` (or another validated rank) determines the winning object, do not simply assume the last serialized object or extract a `name` from the whole root. The user-confirmed Export school-root approach filters each bounded object, ranks eligible records by numeric `index_weight`, carries the object's **raw slot index** through a compact-table argmax reducer, then projects the output field from **that selected object**. In the reported source, `"type":"college"` identifies a college even when that same object's `entry_type` is `home_schooled`; inspect conflicting discriminator properties instead of treating their names as interchangeable. Select the winning record before handling a missing name: a blank winner must not borrow an older record's value. For this specific shape, read `references/school-root-index-weight.md` and use `scripts/build_linked_index_weight_export.py`; note fixed raw-object coverage, six-digit default rank width, and a later-serialized tie policy. The assembled school formula was user-reported working in Element Export, but new configurations still require Test Formula and actual Preview Export.
+
+### Control formula growth before reducing coverage
+
+Read `references/compact-root-pipelines.md` for large root-field formulas. A user-confirmed export optimization retained raw coverage while replacing repeated cross-record parser/map expansion with guarded compact-record producers, regex rejection passes, and linked-payload reduction. The generalized helper is separately locally tested; no universal Element caching or runtime-speed guarantee is implied.
+
+- Treat approximately **500,000 characters** only as a user-reported performance warning from testing, **not an official limit**, safety boundary, or proven cause of missing rows.
+- Construct the root-derived table once in the expression tree and pass each stage as one child of the next. Keep per-occurrence existence guards and same-object eligibility. Do not invent local variables or duplicate the full selector for blank checks.
+- Normalize comparison keys from current-task mappings; keep fixed widths, exact timestamp precision, payload delimiters, group equality, tie policy, and missing-date rules explicit. Avoid huge floating-point packed scores.
+- Reject each candidate before selecting the winner. Use existence after filtering for booleans; use enough adjacent reduction passes for the maximum candidate count when projecting a linked value.
+- Never confuse the first N raw occurrences with the first N valid matches. Do not reduce coverage or introduce an application-root fallback without authorization.
+- Record user confirmation at its reported scope. Require new adaptations to pass static checks, appropriate compatibility probes, Evaluate, Preview Export, and small-export ID/row reconciliation; a character reduction is not a speed benchmark.
 
 ### Preserve exact identifiers
 
@@ -150,9 +175,11 @@ For **Import Preview epoch timestamps**, integer epoch seconds parsed with `DATE
 - Treat `MAX` and `MIN` as binary according to the bundled training signature; nest them for multiple candidates.
 - Use PHP-style date formats supported by the date functions.
 - Do not add regex slash delimiters unless verified in the target context.
+- For **Import literal crosswalks** encoded as a delimiter table such as `|<fixed-width-key>=<value>|...`, normalize the incoming key before lookup when Import Preview may coerce identifier-like text and hide leading zeros. A user-verified Import fix restored a six-character key with `RIGHT(CONCAT("000000", TRIM([C#])), 6)`. When a statically clean escaped-delimiter `REGEXP_EXTRACT` lookup still returned blank for every known key, replacing the regex extraction with nested `SPLIT_INDEX` on the exact `|<normalized-key>=` boundary worked. If the business rule is to preserve an unknown identifier, append a synthetic `<normalized-key>=<normalized-key>|` fallback before splitting. Treat this as verified for that Import lookup architecture, not as evidence that regex is generally unreliable.
 - For **export formulas**, avoid bracketed regex character classes such as `[.]`, `[a-z]`, or `[0-9]` inside quoted strings. Element support confirmed that Export Preview can interpret bracketed text inside a string as a field token and fail with `Expression have undefined tokens`, even when Test Formula succeeds. Prefer an equivalent pattern without square brackets, exact equality/OR checks, or another documented function, then verify with actual Preview Export.
 - Do not assume `\\.` is a drop-in replacement for `[.]` in Element's export runtime. In a tenant-reported application case it passed token validation but failed to match as expected. Treat backslash-heavy regex rewrites as runtime-dependent and test them separately.
 - When an allow-list is a small set of exact strings, prefer explicit equality joined with `|` over clever `CONTAINS` membership tricks unless the boolean return form has been verified. Boolean-returning functions may need an explicit comparison to `TRUE` or `"TRUE"` in the target context.
+- Treat `[user-labels-all]` as a special label-membership case. User-verified probes show ordinary `CONTAINS` works correctly on literal strings, but two `CONTAINS` formulations behaved incorrectly on `[user-labels-all]` while `REGEXP_MATCH([user-labels-all], ".*<LABEL_GUID>.*") = TRUE` worked correctly. Prefer that regex membership pattern for labels unless the current raw label serialization has been inspected and a boundary-aware alternative has been proven on both positive and negative users. Do not generalize this anomaly into a claim that `CONTAINS` is globally broken.
 
 ## Context-specific output rules
 
@@ -222,13 +249,15 @@ Always read `references/root-field-parsing.md`. Also read `references/root-field
    - Apply the same **raw occurrence guard -> bounded current object -> independent same-object checks -> typed candidate -> fixed coverage** discipline to `[user-applications-root]`. Prefer the target application `guid` as the discriminator when it is stable, but derive the application object-start and next-object boundaries from the current application sample rather than copying milestone markers or assuming `guid` is always first.
 6. Apply all conditions to that same isolated object. A second object with the same type but null, missing, or disallowed metadata must not borrow values from a qualifying neighbor.
 7. Include missing optional properties when the rule says only one exact value is excluded.
-8. Choose the candidate type from the requested selection rule: for an **existence/any-match** check, return numeric `1` for a qualifying occurrence and `0` otherwise, then test `SUM(...) > 0`; for a count, return `SUM(...)`; for latest selection, use a valid numeric key or `0`; for earliest selection, use a valid key or a verified high sentinel rather than `0`.
+   - For an ordinal projection, a missing optional output does not remove the selected object from the ordinal count. Read `references/root-field-ordinal-exports.md`; do not turn "second matching milestone, possibly blank" into "second nonblank email."
+8. Choose the candidate type from the requested selection rule: for an **existence/any-match** check, return numeric `1` for a qualifying occurrence and `0` otherwise, then test `SUM(...) > 0`; for a count, return `SUM(...)`; for latest selection, use a valid numeric key or `0`; for earliest selection, use a valid key or a verified high sentinel rather than `0`. Before adding latest/most-recent logic to an any-match boolean, determine whether recency can actually change the output. If every already-qualifying occurrence implies the same TRUE result, filter first and use any-match; only use argmax/latest-first logic when the newest occurrence itself determines eligibility or when a value from the winning occurrence must be returned.
 9. When selecting dates, extract and convert timestamps consistently and build a balanced nested `MAX`/`MIN` strategy appropriate to the sentinel rules. For argmax/argmin, keep each sort key and associated output tied to the same bounded object, state the tie policy, and never look up the winning value from the whole root field afterward.
-10. Guard the no-match result before final conversion or formatting.
+   - For several outputs from one selected application, read `references/application-root-linked-exports.md`. Keep selection identical across companion columns; a missing output must not change the winner. Declare term normalization, unknown-term policy, cross-GUID ties, multi-degree semantics, and per-GUID coverage rather than treating them as universal defaults. Treat packed-score/slot-list selection as runtime-unverified until both Evaluate and Preview Export are observed.
+10. Guard the no-match result before final conversion or formatting. For a milestone-first application fallback or companion season/year outputs, read `references/term-root-fallback.md`. Distinguish no eligible primary record from an eligible primary with an undecodable output; keep the same selector in every companion formula and change only the projection.
 11. Convert milliseconds to **integer** epoch seconds before `DATE_READ(..., "U")`; never pass fractional epoch seconds. Apply the stated timezone rule and format.
 12. If the final output maps a selected tenant GUID to a semantic value (for example Fall 2027 -> `09/01/2027`), verify the exact GUID mapping separately. A local/simulated test must use the real mapping fixture; do not let an invented GUID map make a test appear to pass.
 13. For export formulas, run both Test Formula/Evaluate **and actual Preview Export**. If Preview Export alone reports undefined tokens, inspect square-bracket sequences inside quoted regex/string literals, not just real `[field-slug]` references.
-14. State the maximum occurrence count covered by the formula.
+14. State the maximum occurrence count covered by the formula. For large repeated scans, use `references/compact-root-pipelines.md` before lowering that ceiling; fixed raw coverage and a cap on qualifying records are different promises.
 
 ## Validation tools
 
@@ -241,6 +270,15 @@ python3 scripts/formula_lint.py formatted.txt --strict-functions
 python3 scripts/formula_lint.py formatted.txt --strict-functions --export
 ```
 
+For oversized formulas, measure source growth and test the generalized compact-record stage:
+
+```bash
+python3 scripts/formula_size_report.py formula.txt
+python3 scripts/test_compact_record_pipeline.py
+```
+
+Use `scripts/compact_record_pipeline.py --help` to generate transforms over an already-valid compact table. Read `references/compact-root-pipelines.md` first; the helper does not supply tenant extraction, mappings, or business policy. PHP CLI is required only for its local regression test, not for the Element formula.
+
 For many `MAX` or `MIN` candidates:
 
 ```bash
@@ -252,6 +290,14 @@ To expand a repeated candidate template that contains `{index}`, `{previous_inde
 ```bash
 python3 scripts/build_occurrence_scan.py candidate-template.txt \
   --start-index 2 --count 10 --combine MAX -o candidates-formula.txt
+```
+
+To regenerate the user-confirmed linked latest-college Export architecture from `[user-education-schools-root]` and run its local construction regression (not an Element runtime test):
+
+```bash
+python3 scripts/build_linked_index_weight_export.py --output /tmp/college-name-formula.txt
+python3 scripts/test_linked_index_weight_export.py
+python3 scripts/formula_lint.py /tmp/college-name-formula.txt --strict-functions --export
 ```
 
 To lint every annotated formula block in edited references:
@@ -267,6 +313,30 @@ python3 scripts/test_frontier_designs.py
 ```
 
 This fixture test does not emulate Element451. It catches local Deposit marker/index/reconstruction/count mistakes only.
+
+To test abstract application ranking, global ties, aligned blank outputs, and per-GUID coverage:
+
+```bash
+python3 scripts/test_application_selection_invariants.py
+```
+
+This test uses fictional candidates and precomputed ranks; it does not execute Element formulas, parse live root data, or verify tenant maps.
+
+To regression-check bounded primary/secondary term-source precedence and shared output projection:
+
+```bash
+python3 scripts/test_term_fallback_invariants.py
+```
+
+This additional test uses a fictional abstract rank model, not an Element formula interpreter.
+
+To regression-check the provisional first/second optional-email extraction design:
+
+```bash
+python3 scripts/test_ordinal_email_exports.py
+```
+
+This tests a local Python model of the string operations against fictional JSON fixtures. It does not execute Element formulas or verify the live serializer, label membership, Evaluate, or Preview Export. The examples remain runtime-unverified.
 
 When the user supplies a valid JSON `[user-milestones-root]` sample, inspect the actual objects before designing string markers:
 
@@ -317,7 +387,8 @@ When a user reports Element runtime results for a frontier or uncertain formula:
 4. Preserve the exact error text and expected/actual result.
 5. Generalize the lesson and anonymize tenant fields, GUIDs, mappings, domains, and policy values before adding it to the skill.
 6. Add regression cases to the relevant reference.
-7. Use **user-verified** only for behavior actually observed; keep untested formulas labeled **static-lint clean** or **design target**.
+7. A request to record lessons is not confirmation that a preceding formula worked. Retain missing-sample assumptions and unverified runtime status; report local checks only when their execution is available, not merely because a prior assistant claimed a test count.
+8. Use **user-verified** only for behavior actually observed; keep untested formulas labeled **static-lint clean** or **design target**. A general "worked correctly" confirms the assembled solution only to the reported scope, not every branch, variant, execution surface, or suspected root cause. Do not apply that confirmation to a subsequently delivered companion formula without separate feedback.
 
 ## Output contract
 

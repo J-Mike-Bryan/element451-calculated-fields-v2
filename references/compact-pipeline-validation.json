@@ -1,0 +1,36 @@
+{
+  "compact_table_cases": 1202,
+  "formula_static_checks": 384,
+  "mismatches": 0,
+  "engine": "local PHP PCRE",
+  "element451_runtime_tested": false,
+  "scope": "Synthetic normalized records only; not root parsing, tenant lookups, coercion, or performance.",
+  "entrypoint_lines": 407,
+  "all_annotated_reference_formulas": 44,
+  "reference_formula_errors": 0,
+  "existing_reference_formula_warnings": 6,
+  "changed_files": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "references/formula-capability-matrix.md",
+    "references/formula-functions.md",
+    "references/root-field-export-preview.md",
+    "references/root-field-parsing.md",
+    "references/root-field-selection.md",
+    "references/testing-debugging.md"
+  ],
+  "added_files": [
+    "references/compact-pipeline-compatibility-probe.txt",
+    "references/compact-pipeline-literal-input.txt",
+    "references/compact-pipeline-literal-output.txt",
+    "references/compact-pipeline-validation.json",
+    "references/compact-root-pipelines.md",
+    "scripts/compact_record_pipeline.py",
+    "scripts/formula_size_report.py",
+    "scripts/test_compact_record_pipeline.py"
+  ],
+  "tenant_identifier_scan_passed": true,
+  "all_previous_files_retained": true,
+  "comparison_patterns_match_original_after_role_substitution": true,
+  "existing_warnings_note": "Six seasonal-offset warnings in unchanged date-frontier examples; no new compact-pipeline warnings."
+}

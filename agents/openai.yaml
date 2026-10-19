@@ -1,15 +1,7 @@
 interface:
   display_name: Element451 Calculated Fields V2
-  short_description: Write, edit, explain, review, and troubleshoot Element451 formulas
-    used in imports, exports, Workflow/Rule Formula Fields, and calculated payments.
-    Use when a user mentions calculated columns, formula actions, payment calculations,
-    `[C#]` columns, Element field slugs, `DB_MAP`, `DS_MAP`, `TAXONOMY_MAP`, dates,
-    labels, checkbox values, regex, application or milestone root fields, serialized
-    JSON-like data, count/any/latest/earliest or linked argmax/argmin selection, parser
-    or Preview Export errors, successful evaluation that does not persist, or incorrect
-    formula output. Require current-task tenant fields, GUIDs, mappings, target type,
-    and data shape; use only source-supported functions, return complete formulas,
-    validate long formulas, and keep the solution in formulas when required.
+  short_description: Build, debug, and optimize Element451 formulas with verified
+    patterns.
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:

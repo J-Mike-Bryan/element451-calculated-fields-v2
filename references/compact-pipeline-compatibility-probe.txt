@@ -1,0 +1,10 @@
+IF(
+    (REGEXP_REPLACE("stage04", "^stage(..)$", "0${1}") = "004")
+    & (REGEXP_MATCH("014:014", "^(?P<t>...):(?P=t)$") = TRUE)
+    & (REGEXP_MATCH("014:013", "^(?P<t>...):(?P=t)$") = FALSE)
+    & (REGEXP_REPLACE("AB", "(?:(A)(X)|(A)(B))", "${1}${4}") = "B")
+    & (RIGHT(CONCAT("0000000000000000", MAX(0, VAL("1700000000123"))), 16) = "0001700000000123")
+    & (REGEXP_EXTRACT("", "=(.*?);") = ""),
+    "PASS",
+    "FAIL"
+)

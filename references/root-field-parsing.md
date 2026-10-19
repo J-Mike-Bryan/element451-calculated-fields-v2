@@ -635,3 +635,7 @@ Do not assume a `\.` rewrite behaves identically to `[.]` in Element formula str
 ### Term-derived output is wrong even though the correct milestone was selected
 
 Likely cause: a tenant term GUID was assigned a name/code/year from an assumed mapping. Treat term GUIDs as opaque. Return the selected raw term GUID first, then verify its actual code/name with user-provided taxonomy data, `DB_MAP`, or a focused Element diagnostic before hard-coding a semester/year/date. Any local simulation must use the verified mapping fixture rather than a guessed list order.
+
+## Parsing cost and compact intermediates
+
+For long cross-record formulas, preserve this reference's raw-occurrence guards and same-object boundaries but move downstream comparisons to compact validated records. See `references/compact-root-pipelines.md`. This is not a new root parser: current serializer evidence remains mandatory, and per-producer extraction may still repeat. The gain is removing repeated whole-root scans/maps from each comparison and outer projection.
